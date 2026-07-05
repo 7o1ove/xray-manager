@@ -10,8 +10,8 @@ SCRIPT_DIR="/root/xray-manager"
 
 SYSTEM_SCRIPT="${SCRIPT_DIR}/system/system.sh"
 INSTALL_SCRIPT="${SCRIPT_DIR}/core/xray-core.sh"
-VLESS_SCRIPT="${SCRIPT_DIR}/vless.sh"
-SS_SCRIPT="${SCRIPT_DIR}/shadowsocks.sh"
+VLESS_SCRIPT="${SCRIPT_DIR}/core/vless.sh"
+SS_SCRIPT="${SCRIPT_DIR}/core/shadowsocks.sh"
 
 CONFIG_DIR="/usr/local/etc/xray"
 CLIENT_DIR="${CONFIG_DIR}/client"
@@ -74,7 +74,7 @@ header(){
     echo "=========================================="
 
     echo -e "${CYAN}             Xray Manager${RESET}"
-    echo "       VLESS â€¢ Shadowsocks"
+    echo "       VLESS â€?Shadowsocks"
 
     echo "=========================================="
 
