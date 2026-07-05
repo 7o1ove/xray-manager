@@ -32,6 +32,52 @@ ensure_dependencies(){
     fi
 }
 
+check_reality_target(){
+    local host="$1"
+    local http_version=""
+
+    info "正在检查 Reality 目标站点..."
+
+    if [[ "$host" != *.* ]]; then
+        warning "目标站点看起来不像有效域名：${host}"
+        if ! confirm_action "仍然继续配置 VLESS Reality 吗？"; then
+            exit 1
+        fi
+        return
+    fi
+
+    if ! curl -V | grep -qi "HTTP2"; then
+        warning "当前 curl 不支持 HTTP/2，无法执行 --http2 检查。"
+        warning "请安装支持 HTTP/2 的 curl，或手动执行 curl -I --http2 https://${host} 检查。"
+        if ! confirm_action "仍然继续配置 VLESS Reality 吗？"; then
+            exit 1
+        fi
+        return
+    fi
+
+    http_version=$(
+        curl -sSI --http2 --connect-timeout 5 --max-time 10 \
+            -o /dev/null \
+            -w "%{http_version}" \
+            "https://${host}" || true
+    )
+
+    if [[ "$http_version" == "2" ]]; then
+        success "Reality 目标站点检查通过：HTTPS / HTTP2 可用。"
+        return
+    fi
+
+    if [[ -n "$http_version" ]]; then
+        warning "目标站点可访问，但未协商到 HTTP/2，当前 HTTP 版本：${http_version}"
+    else
+        warning "目标站点检查失败：无法通过 HTTPS / HTTP2 访问 https://${host}"
+    fi
+
+    if ! confirm_action "仍然继续配置 VLESS Reality 吗？"; then
+        exit 1
+    fi
+}
+
 ensure_dependencies
 
 info "正在检查 Xray..."
@@ -71,7 +117,10 @@ read -r -p "$(prompt_text "Reality SNI（默认 icloud.com）: ")" SNI
 SNI=${SNI:-icloud.com}
 SNI=${SNI#https://}
 SNI=${SNI#http://}
+SNI=${SNI%%/*}
 SNI=${SNI%/}
+
+check_reality_target "$SNI"
 
 info "正在生成 UUID..."
 
