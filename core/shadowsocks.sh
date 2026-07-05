@@ -107,7 +107,19 @@ fi
 SS_BASE64=$(printf "%s:%s" "$METHOD" "$PASSWORD" | base64 | tr -d '\n')
 SS_LINK="ss://${SS_BASE64}@${SERVER_IP}:${PORT}"
 
-echo "$SS_LINK" > "$CLIENT_FILE"
+cat > "$CLIENT_FILE" <<EOF
+SS Link:
+${SS_LINK}
+
+Mihomo / Clash:
+- name: Shadowsocks
+  type: ss
+  server: ${SERVER_IP}
+  port: ${PORT}
+  cipher: ${METHOD}
+  password: ${PASSWORD}
+  udp: true
+EOF
 
 banner "    Shadowsocks 安装成功" "$GREEN"
 kv "Server IP :" "$SERVER_IP"
@@ -119,13 +131,19 @@ section "SS Link" "$GREEN"
 echo
 value "$SS_LINK"
 echo
-label " Config File"
+label " Xray 主配置文件"
 path_value "${XRAY_DIR}/config.json"
 echo
-label " Protocol File"
+label " Shadowsocks 协议配置文件"
 path_value "$PROTOCOL_CONFIG"
 echo
-label " Client File"
+label " 节点信息文件"
 path_value "$CLIENT_FILE"
+echo
+section "Mihomo / Clash" "$GREEN"
+echo
+sed -n '/^Mihomo \/ Clash:/,$p' "$CLIENT_FILE" | tail -n +2 | while IFS= read -r line; do
+    value "$line"
+done
 echo
 divider "$GREEN"

@@ -146,7 +146,7 @@ configure_shadowsocks(){
 uninstall_vless(){
     header
     warning "正在卸载 VLESS Reality..."
-    rm -f "${PROTOCOL_DIR}/vless.json" "${CLIENT_DIR}/vless.txt"
+    rm -f "${PROTOCOL_DIR}/vless.json" "${CLIENT_DIR}/vless.txt" "${CLIENT_DIR}/vless-mihomo.yaml"
     rebuild_or_stop_xray
     pause
 }
@@ -154,18 +154,20 @@ uninstall_vless(){
 uninstall_shadowsocks(){
     header
     warning "正在卸载 Shadowsocks..."
-    rm -f "${PROTOCOL_DIR}/shadowsocks.json" "${CLIENT_DIR}/shadowsocks.txt"
+    rm -f "${PROTOCOL_DIR}/shadowsocks.json" "${CLIENT_DIR}/shadowsocks.txt" "${CLIENT_DIR}/shadowsocks-mihomo.yaml"
     rebuild_or_stop_xray
     pause
 }
 
-show_client_links(){
+show_client_info(){
     header
 
     section "VLESS Reality" "$CYAN"
     echo
     if [[ -f "${CLIENT_DIR}/vless.txt" ]]; then
-        value "$(cat "${CLIENT_DIR}/vless.txt")"
+        while IFS= read -r line; do
+            value "$line"
+        done < "${CLIENT_DIR}/vless.txt"
     else
         warning "未配置"
     fi
@@ -174,7 +176,9 @@ show_client_links(){
     section "Shadowsocks" "$CYAN"
     echo
     if [[ -f "${CLIENT_DIR}/shadowsocks.txt" ]]; then
-        value "$(cat "${CLIENT_DIR}/shadowsocks.txt")"
+        while IFS= read -r line; do
+            value "$line"
+        done < "${CLIENT_DIR}/shadowsocks.txt"
     else
         warning "未配置"
     fi
@@ -783,7 +787,7 @@ main_menu(){
         echo
         divider "$CYAN" "-"
         echo
-        menu_item "6" "查看节点链接"
+        menu_item "6" "查看节点信息"
         menu_item "7" "查看 Xray 状态"
         menu_item "8" "重启 Xray"
         menu_item "9" "更新 Xray Core"
@@ -806,7 +810,7 @@ main_menu(){
             3) uninstall_vless ;;
             4) configure_shadowsocks ;;
             5) uninstall_shadowsocks ;;
-            6) show_client_links ;;
+            6) show_client_info ;;
             7) show_status ;;
             8) restart_xray ;;
             9) update_xray ;;

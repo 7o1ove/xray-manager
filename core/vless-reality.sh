@@ -176,19 +176,45 @@ fi
 
 VLESS_LINK="vless://${UUID}@${SERVER_IP}:${PORT}?encryption=none&flow=${FLOW}&security=reality&type=tcp&sni=${SNI}&fp=${FINGERPRINT}&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&packetEncoding=xudp"
 
-echo "$VLESS_LINK" > "$CLIENT_FILE"
+cat > "$CLIENT_FILE" <<EOF
+VLESS Link:
+${VLESS_LINK}
+
+Mihomo / Clash:
+- name: VLESS Reality
+  type: vless
+  server: ${SERVER_IP}
+  port: ${PORT}
+  uuid: ${UUID}
+  network: tcp
+  tls: true
+  udp: true
+  flow: ${FLOW}
+  servername: ${SNI}
+  client-fingerprint: ${FINGERPRINT}
+  packet-encoding: xudp
+  reality-opts:
+    public-key: ${PUBLIC_KEY}
+    short-id: ${SHORT_ID}
+EOF
 
 echo
 section "VLESS Link" "$GREEN"
 echo
 value "$VLESS_LINK"
 echo
-label " Config File"
+label " Xray 主配置文件"
 path_value "${XRAY_DIR}/config.json"
 echo
-label " Protocol File"
+label " VLESS Reality 协议配置文件"
 path_value "$PROTOCOL_CONFIG"
 echo
-label " Client File"
+label " 节点信息文件"
 path_value "$CLIENT_FILE"
+echo
+section "Mihomo / Clash" "$GREEN"
+echo
+sed -n '/^Mihomo \/ Clash:/,$p' "$CLIENT_FILE" | tail -n +2 | while IFS= read -r line; do
+    value "$line"
+done
 echo

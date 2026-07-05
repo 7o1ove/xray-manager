@@ -141,7 +141,7 @@ fi
 
 banner " Configuration built successfully" "$GREEN"
 echo
-label " Config File"
+label " Xray 主配置文件"
 path_value "$CONFIG_FILE"
 echo
 divider "$GREEN"
