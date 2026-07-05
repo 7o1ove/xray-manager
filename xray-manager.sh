@@ -239,6 +239,13 @@ update_xray(){
 run_vps_test(){
     header
     warning "即将运行 VPS 测试脚本。"
+
+    if ! confirm_action "确认运行 VPS 测试脚本吗？"; then
+        warning "已取消。"
+        pause
+        return
+    fi
+
     apt update
     apt install wget curl -y
     bash <(curl -sL https://run.NodeQuality.com)
@@ -248,10 +255,50 @@ run_vps_test(){
 dd_debian(){
     header
     warning "即将 DD 安装 Debian，执行后系统可能重装并断开连接。"
+
+    if ! confirm_action "确认 DD 安装 Debian 吗？"; then
+        warning "已取消。"
+        pause
+        return
+    fi
+
     apt update
     apt install wget curl -y
     curl -O https://raw.githubusercontent.com/bin456789/reinstall/main/reinstall.sh
     bash reinstall.sh debian
+}
+
+show_ssh_status(){
+    header
+
+    local ssh_port
+    local password_auth
+    local pubkey_auth
+    local root_login
+    local service_status
+    local key_status
+
+    ssh_port=$(current_ssh_port)
+    password_auth=$(awk 'tolower($1)=="passwordauthentication"{v=$2} END{print v ? v : "default"}' /etc/ssh/sshd_config)
+    pubkey_auth=$(awk 'tolower($1)=="pubkeyauthentication"{v=$2} END{print v ? v : "default"}' /etc/ssh/sshd_config)
+    root_login=$(awk 'tolower($1)=="permitrootlogin"{v=$2} END{print v ? v : "default"}' /etc/ssh/sshd_config)
+    service_status=$(systemctl is-active ssh 2>/dev/null || systemctl is-active sshd 2>/dev/null || echo "unknown")
+
+    if [[ -s /root/.ssh/authorized_keys ]]; then
+        key_status="已设置"
+    else
+        key_status="未设置"
+    fi
+
+    banner "     SSH 状态" "$GREEN"
+    kv "SSH 端口              :" "$ssh_port"
+    kv "SSH 服务              :" "$service_status"
+    kv "Root 密钥             :" "$key_status"
+    kv "密码登录              :" "$password_auth"
+    kv "公钥登录              :" "$pubkey_auth"
+    kv "Root 登录策略         :" "$root_login"
+
+    pause
 }
 
 set_ssh_port(){
@@ -318,6 +365,7 @@ ssh_menu(){
         header
         menu_item "1" "设置 SSH 端口"
         menu_item "2" "设置 SSH 密钥"
+        menu_item "3" "查看 SSH 状态"
         echo
         menu_item "0" "返回"
         echo
@@ -326,6 +374,7 @@ ssh_menu(){
         case "$choice" in
             1) set_ssh_port ;;
             2) set_ssh_key ;;
+            3) show_ssh_status ;;
             0) return ;;
             *) error "无效选择。"; pause ;;
         esac
@@ -365,6 +414,20 @@ restart_ufw(){
     pause
 }
 
+show_ufw_status(){
+    header
+
+    if ! command -v ufw >/dev/null 2>&1; then
+        warning "UFW 未安装。"
+        pause
+        return
+    fi
+
+    banner "     UFW 状态" "$GREEN"
+    ufw status verbose
+    pause
+}
+
 uninstall_ufw(){
     header
     warning "正在卸载 UFW..."
@@ -382,7 +445,8 @@ ufw_menu(){
         menu_item "2" "增加 IP"
         menu_item "3" "删除 IP"
         menu_item "4" "重启 UFW"
-        menu_item "5" "卸载 UFW"
+        menu_item "5" "查看 UFW 状态"
+        menu_item "6" "卸载 UFW"
         echo
         menu_item "0" "返回"
         echo
@@ -393,7 +457,8 @@ ufw_menu(){
             2) ufw_add_ip ;;
             3) ufw_delete_ip ;;
             4) restart_ufw ;;
-            5) uninstall_ufw ;;
+            5) show_ufw_status ;;
+            6) uninstall_ufw ;;
             0) return ;;
             *) error "无效选择。"; pause ;;
         esac
@@ -494,11 +559,27 @@ delete_swap(){
     pause
 }
 
+show_swap_status(){
+    header
+    banner "     虚拟内存状态" "$GREEN"
+
+    if [[ -n "$(swapon --show)" ]]; then
+        swapon --show
+    else
+        warning "当前没有启用虚拟内存。"
+    fi
+
+    echo
+    free -h
+    pause
+}
+
 swap_menu(){
     while true; do
         header
         menu_item "1" "安装 1G 虚拟内存"
         menu_item "2" "删除虚拟内存"
+        menu_item "3" "查看虚拟内存状态"
         echo
         menu_item "0" "返回"
         echo
@@ -507,6 +588,7 @@ swap_menu(){
         case "$choice" in
             1) install_swap ;;
             2) delete_swap ;;
+            3) show_swap_status ;;
             0) return ;;
             *) error "无效选择。"; pause ;;
         esac
@@ -549,6 +631,20 @@ EOF
 
     sysctl --system >/dev/null
     success "系统调优已完成。"
+
+    echo
+    banner "     调优后参数" "$GREEN"
+    kv "default_qdisc                 :" "$(sysctl -n net.core.default_qdisc 2>/dev/null || echo unknown)"
+    kv "tcp_congestion_control        :" "$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo unknown)"
+    kv "nf_conntrack_max              :" "$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null || echo unknown)"
+    kv "somaxconn                     :" "$(sysctl -n net.core.somaxconn 2>/dev/null || echo unknown)"
+    kv "rmem_max                      :" "$(sysctl -n net.core.rmem_max 2>/dev/null || echo unknown)"
+    kv "wmem_max                      :" "$(sysctl -n net.core.wmem_max 2>/dev/null || echo unknown)"
+    kv "tcp_fastopen                  :" "$(sysctl -n net.ipv4.tcp_fastopen 2>/dev/null || echo unknown)"
+    kv "tcp_ecn                       :" "$(sysctl -n net.ipv4.tcp_ecn 2>/dev/null || echo unknown)"
+    kv "tcp_mtu_probing               :" "$(sysctl -n net.ipv4.tcp_mtu_probing 2>/dev/null || echo unknown)"
+    kv "swappiness                    :" "$(sysctl -n vm.swappiness 2>/dev/null || echo unknown)"
+
     pause
 }
 
@@ -596,6 +692,14 @@ ipv6_menu(){
     done
 }
 
+apt_autoremove_cleanup(){
+    header
+    warning "正在清理过期软件包..."
+    apt autoremove -y
+    success "过期软件包清理完成。"
+    pause
+}
+
 tools_menu(){
     while true; do
         header
@@ -608,6 +712,7 @@ tools_menu(){
         menu_item "7" "时区调整"
         menu_item "8" "系统调优"
         menu_item "9" "IPv6 管理"
+        menu_item "10" "清理过期软件包"
         echo
         menu_item "0" "返回主菜单"
         echo
@@ -623,6 +728,7 @@ tools_menu(){
             7) set_timezone ;;
             8) system_tuning ;;
             9) ipv6_menu ;;
+            10) apt_autoremove_cleanup ;;
             0) return ;;
             *) error "无效选择。"; pause ;;
         esac

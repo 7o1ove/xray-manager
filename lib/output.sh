@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 RED="\033[31m"
-GREEN="\033[32m"
+GREEN="\033[92m"
 YELLOW="\033[33m"
 CYAN="\033[36m"
 RESET="\033[0m"
@@ -32,6 +32,14 @@ error(){
 
 prompt_text(){
     printf "%b" "${YELLOW}$1${RESET}"
+}
+
+confirm_action(){
+    local message="$1"
+    local answer
+
+    read -r -p "$(prompt_text "${message} [y/N]: ")" answer
+    [[ "$answer" =~ ^[Yy]$ ]]
 }
 
 label(){
