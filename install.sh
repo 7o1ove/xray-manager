@@ -9,10 +9,16 @@ echo "Installing Xray Manager..."
 echo "=================================="
 
 # 1. 如果目录存在就更新，不存在就clone
-if [ -d "$INSTALL_DIR" ]; then
+if [ -d "$INSTALL_DIR/.git" ]; then
     echo "[+] Directory exists, updating..."
+
     cd "$INSTALL_DIR"
-    git pull
+
+    echo "[+] Force syncing with remote..."
+    git fetch origin
+    git reset --hard origin/main
+    git clean -fd
+
 else
     echo "[+] Cloning repo..."
     git clone "$REPO" "$INSTALL_DIR"
