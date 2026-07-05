@@ -2,21 +2,24 @@
 
 set -Eeuo pipefail
 
+SCRIPT_DIR="/root/xray-manager"
+
+# shellcheck source=/root/xray-manager/lib/output.sh
+source "${SCRIPT_DIR}/lib/output.sh"
+
 XRAY_DIR="/usr/local/etc/xray"
 
 CONFIG_FILE="${XRAY_DIR}/config.json"
 PROTOCOL_DIR="${XRAY_DIR}/protocols"
 OUTBOUND_FILE="${XRAY_DIR}/outbound.json"
 
-echo "==> Building Xray configuration..."
+info "Building Xray configuration..."
 
 mkdir -p "$XRAY_DIR"
 mkdir -p "$PROTOCOL_DIR"
 mkdir -p "$(dirname "$CONFIG_FILE")"
 
-#--------------------------------------------------
 # Find Xray
-#--------------------------------------------------
 
 if command -v xray >/dev/null 2>&1; then
 
@@ -32,27 +35,23 @@ elif [[ -x /usr/bin/xray ]]; then
 
 else
 
-    echo "Xray not found."
+    error "Xray not found."
 
     exit 1
 
 fi
 
-#--------------------------------------------------
 # Check outbound
-#--------------------------------------------------
 
 if [[ ! -f "$OUTBOUND_FILE" ]]; then
 
-    echo "Outbound configuration not found."
+    error "Outbound configuration not found."
 
     exit 1
 
 fi
 
-#--------------------------------------------------
 # Check inbound
-#--------------------------------------------------
 
 FOUND=false
 
@@ -70,15 +69,13 @@ done
 
 if ! $FOUND; then
 
-    echo "No protocol configuration found."
+    error "No protocol configuration found."
 
     exit 1
 
 fi
 
-#--------------------------------------------------
 # Write config.json
-#--------------------------------------------------
 
 cat > "$CONFIG_FILE" <<EOF
 {
@@ -130,30 +127,21 @@ cat >> "$CONFIG_FILE" <<EOF
 }
 EOF
 
-#--------------------------------------------------
 # Test
-#--------------------------------------------------
 
-echo "==> Testing configuration..."
+info "Testing configuration..."
 
 if ! "$XRAY_BIN" run -test -config "$CONFIG_FILE"; then
 
-    echo
-    echo "=========================================="
-    echo " Configuration test failed"
-    echo "=========================================="
-    echo
+    banner " Configuration test failed" "$RED"
 
     exit 1
 
 fi
 
+banner " Configuration built successfully" "$GREEN"
 echo
-echo "=========================================="
-echo " Configuration built successfully"
-echo "=========================================="
+label " Config File"
+path_value "$CONFIG_FILE"
 echo
-echo " Config File"
-echo " $CONFIG_FILE"
-echo
-echo "=========================================="
+divider "$GREEN"

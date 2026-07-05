@@ -2,6 +2,11 @@
 
 set -Eeuo pipefail
 
+SCRIPT_DIR="/root/xray-manager"
+
+# shellcheck source=/root/xray-manager/lib/output.sh
+source "${SCRIPT_DIR}/lib/output.sh"
+
 ########################################
 # Variables
 ########################################
@@ -16,11 +21,11 @@ SWAPFILE="/swapfile"
 
 TIMEZONE="Asia/Hong_Kong"
 
-echo "==> Updating package list..."
+info "Updating package list..."
 
 apt update
 
-echo "==> Installing dependencies..."
+info "Installing dependencies..."
 
 apt install -y \
     openssl \
@@ -30,15 +35,15 @@ apt install -y \
     ufw \
     fail2ban
 
-echo "==> Configuring SSH..."
+info "Configuring SSH..."
 
-read -rp "SSH Port: " SSH_PORT
+read -r -p "$(prompt_text "SSH Port: ")" SSH_PORT
 
 if [[ ! "$SSH_PORT" =~ ^[0-9]+$ ]] || \
    [[ "$SSH_PORT" -lt 1 ]] || \
    [[ "$SSH_PORT" -gt 65535 ]]; then
 
-    echo "Invalid SSH port."
+    error "Invalid SSH port."
 
     exit 1
 
@@ -46,7 +51,7 @@ fi
 
 if ss -ltnH | awk '{print $4}' | grep -q ":${SSH_PORT}$"; then
 
-    echo "Port already in use."
+    error "Port already in use."
 
     exit 1
 
@@ -54,11 +59,11 @@ fi
 
 echo
 
-read -rp "SSH Public Key: " PUBLIC_KEY
+read -r -p "$(prompt_text "SSH Public Key: ")" PUBLIC_KEY
 
 if [[ -z "$PUBLIC_KEY" ]]; then
 
-    echo "SSH Public Key cannot be empty."
+    error "SSH Public Key cannot be empty."
 
     exit 1
 
@@ -73,7 +78,7 @@ echo "$PUBLIC_KEY" > /root/.ssh/authorized_keys
 chmod 600 /root/.ssh/authorized_keys
 
 
-echo "==> Applying SSH configuration..."
+info "Applying SSH configuration..."
 
 declare -A SSH_CONFIGS=(
     ["Port"]="$SSH_PORT"
@@ -120,7 +125,7 @@ END {
 
 mv "${SSH_CONFIG}.tmp" "$SSH_CONFIG"
 
-echo "==> Configuring firewall..."
+info "Configuring firewall..."
 
 ufw allow "${SSH_PORT}/tcp" comment "SSH"
 
@@ -128,7 +133,7 @@ ufw delete allow 22/tcp >/dev/null 2>&1 || true
 
 ufw delete allow OpenSSH >/dev/null 2>&1 || true
 
-echo "==> Configuring Fail2Ban..."
+info "Configuring Fail2Ban..."
 
 cat > "$FAIL2BAN_CONFIG" <<EOF
 [DEFAULT]
@@ -146,7 +151,7 @@ bantime = 604800
 EOF
 
 
-read -rp "Create 1G Swap? [y/n]: " CREATE_SWAP
+read -r -p "$(prompt_text "Create 1G Swap? [y/n]: ")" CREATE_SWAP
 
 CREATE_SWAP=${CREATE_SWAP:-y}
 
@@ -154,7 +159,7 @@ SWAP_STATUS="Skipped"
 
 if [[ "$CREATE_SWAP" =~ ^[Yy]$ ]]; then
 
-    echo "==> Creating swap..."
+    info "Creating swap..."
 
     if [[ -z "$(swapon --show)" ]]; then
 
@@ -180,15 +185,15 @@ if [[ "$CREATE_SWAP" =~ ^[Yy]$ ]]; then
 
 else
 
-    echo "==> Skipping swap..."
+    warning "Skipping swap..."
 
 fi
 
-echo "==> Configuring timezone..."
+info "Configuring timezone..."
 
 timedatectl set-timezone "$TIMEZONE"
 
-echo "==> Applying system optimization..."
+info "Applying system optimization..."
 
 modprobe nf_conntrack 2>/dev/null || true
 
@@ -216,7 +221,7 @@ EOF
 
 sysctl --system >/dev/null
 
-echo "==> Restarting services..."
+info "Restarting services..."
 
 systemctl restart ssh
 
@@ -228,33 +233,25 @@ systemctl enable fail2ban
 
 systemctl restart fail2ban
 
-echo
+banner "     System Configuration Summary" "$GREEN"
 
-echo "=========================================="
-
-echo "     System Configuration Summary"
-
-echo "=========================================="
+kv "SSH Port    :" "$SSH_PORT"
+kv "SSH Auth    :" "Key Only"
 
 echo
 
-echo " SSH Port    : $SSH_PORT"
-echo " SSH Auth    : Key Only"
+kv "Firewall    :" "$(ufw status | grep -q active && echo Enabled || echo Disabled)"
+kv "Fail2Ban    :" "$(systemctl is-active --quiet fail2ban && echo Enabled || echo Disabled)"
 
 echo
 
-echo " Firewall    : $(ufw status | grep -q active && echo Enabled || echo Disabled)"
-echo " Fail2Ban    : $(systemctl is-active --quiet fail2ban && echo Enabled || echo Disabled)"
+kv "Swap        :" "$SWAP_STATUS"
+kv "Timezone    :" "$TIMEZONE"
 
 echo
 
-echo " Swap        : $SWAP_STATUS"
-echo " Timezone    : $TIMEZONE"
-
-echo
-
-echo " TCP CC      : bbr"
-echo " Qdisc       : fq"
+kv "TCP CC      :" "bbr"
+kv "Qdisc       :" "fq"
 
 echo
 

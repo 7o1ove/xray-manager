@@ -2,6 +2,11 @@
 
 set -Eeuo pipefail
 
+SCRIPT_DIR="/root/xray-manager"
+
+# shellcheck source=/root/xray-manager/lib/output.sh
+source "${SCRIPT_DIR}/lib/output.sh"
+
 XRAY_DIR="/usr/local/etc/xray"
 
 PROTOCOL_CONFIG="${XRAY_DIR}/protocols/shadowsocks.json"
@@ -9,7 +14,7 @@ CLIENT_FILE="${XRAY_DIR}/client/shadowsocks.txt"
 
 METHOD="2022-blake3-aes-256-gcm"
 
-echo "==> Checking Xray..."
+info "正在检查 Xray..."
 
 if command -v xray >/dev/null 2>&1; then
     XRAY_BIN=$(command -v xray)
@@ -18,7 +23,7 @@ elif [[ -x /usr/local/bin/xray ]]; then
 elif [[ -x /usr/bin/xray ]]; then
     XRAY_BIN="/usr/bin/xray"
 else
-    echo "Please install Xray Core first."
+    error "请先安装 Xray Core。"
     exit 1
 fi
 
@@ -30,7 +35,7 @@ SERVER_IP=$(
     echo "Unknown"
 )
 
-read -rp "Port (press Enter for random): " PORT
+read -r -p "$(prompt_text "端口（留空随机）: ")" PORT
 
 if [[ -z "$PORT" ]]; then
     while :; do
@@ -39,11 +44,11 @@ if [[ -z "$PORT" ]]; then
     done
 fi
 
-echo "==> Generating Password..."
+info "正在生成密码..."
 
 PASSWORD=$(openssl rand -base64 32 | tr -d '\n')
 
-echo "==> Saving protocol..."
+info "正在保存 Shadowsocks 协议配置..."
 
 cat > "$PROTOCOL_CONFIG" <<EOF
 {
@@ -73,12 +78,12 @@ cat > "$PROTOCOL_CONFIG" <<EOF
 }
 EOF
 
-echo "==> Building configuration..."
+info "正在构建 Xray 配置..."
 if ! bash /root/xray-manager/config/build_config.sh; then
     exit 1
 fi
 
-echo "==> Updating firewall..."
+info "正在更新防火墙..."
 
 if command -v ufw >/dev/null 2>&1; then
     ufw status | grep -q "${PORT}/tcp" || \
@@ -88,17 +93,13 @@ if command -v ufw >/dev/null 2>&1; then
     ufw allow "${PORT}/udp" comment "Xray Shadowsocks UDP" >/dev/null
 fi
 
-echo "==> Starting Xray..."
+info "正在启动 Xray..."
 
 systemctl restart xray
 sleep 1
 
 if ! systemctl is-active --quiet xray; then
-    echo
-    echo "=========================================="
-    echo " Xray failed to start"
-    echo "=========================================="
-    echo
+    banner " Xray 启动失败" "$RED"
     journalctl -u xray -n 20 --no-pager
     exit 1
 fi
@@ -108,27 +109,23 @@ SS_LINK="ss://${SS_BASE64}@${SERVER_IP}:${PORT}"
 
 echo "$SS_LINK" > "$CLIENT_FILE"
 
+banner "    Shadowsocks 安装成功" "$GREEN"
+kv "Server IP :" "$SERVER_IP"
+kv "Port      :" "$PORT"
+kv "Method    :" "$METHOD"
+kv "Password  :" "$PASSWORD"
 echo
-echo "=========================================="
-echo "    Shadowsocks Installed Successfully"
-echo "=========================================="
+section "SS Link" "$GREEN"
 echo
-echo " Server IP : $SERVER_IP"
-echo " Port      : $PORT"
-echo " Method    : $METHOD"
-echo " Password  : $PASSWORD"
+value "$SS_LINK"
 echo
-echo "================== SS Link =================="
+label " Config File"
+path_value "${XRAY_DIR}/config.json"
 echo
-echo " $SS_LINK"
+label " Protocol File"
+path_value "$PROTOCOL_CONFIG"
 echo
-echo " Config File"
-echo " ${XRAY_DIR}/config.json"
+label " Client File"
+path_value "$CLIENT_FILE"
 echo
-echo " Protocol File"
-echo " $PROTOCOL_CONFIG"
-echo
-echo " Client File"
-echo " $CLIENT_FILE"
-echo
-echo "=========================================="
+divider "$GREEN"

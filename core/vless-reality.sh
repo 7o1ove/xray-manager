@@ -2,6 +2,11 @@
 
 set -Eeuo pipefail
 
+SCRIPT_DIR="/root/xray-manager"
+
+# shellcheck source=/root/xray-manager/lib/output.sh
+source "${SCRIPT_DIR}/lib/output.sh"
+
 XRAY_DIR="/usr/local/etc/xray"
 
 PROTOCOL_CONFIG="${XRAY_DIR}/protocols/vless.json"
@@ -10,7 +15,26 @@ CLIENT_FILE="${XRAY_DIR}/client/vless.txt"
 FLOW="xtls-rprx-vision"
 FINGERPRINT="chrome"
 
-echo "==> Checking Xray..."
+ensure_dependencies(){
+    local missing=()
+    local package
+
+    for package in curl openssl coreutils iproute2; do
+        if ! dpkg -s "$package" >/dev/null 2>&1; then
+            missing+=("$package")
+        fi
+    done
+
+    if [[ "${#missing[@]}" -gt 0 ]]; then
+        info "正在安装 VLESS Reality 环境依赖..."
+        apt update
+        apt install -y "${missing[@]}"
+    fi
+}
+
+ensure_dependencies
+
+info "正在检查 Xray..."
 
 if command -v xray >/dev/null 2>&1; then
     XRAY_BIN=$(command -v xray)
@@ -19,7 +43,7 @@ elif [[ -x /usr/local/bin/xray ]]; then
 elif [[ -x /usr/bin/xray ]]; then
     XRAY_BIN="/usr/bin/xray"
 else
-    echo "Please install Xray Core first."
+    error "请先安装 Xray Core。"
     exit 1
 fi
 
@@ -33,7 +57,7 @@ SERVER_IP=$(
     echo "Unknown"
 )
 
-read -rp "Port (default random): " PORT
+read -r -p "$(prompt_text "端口（留空随机）: ")" PORT
 
 if [[ -z "$PORT" ]]; then
     while :; do
@@ -42,18 +66,18 @@ if [[ -z "$PORT" ]]; then
     done
 fi
 
-read -rp "Reality SNI (default: icloud.com): " SNI
+read -r -p "$(prompt_text "Reality SNI（默认 icloud.com）: ")" SNI
 
 SNI=${SNI:-icloud.com}
 SNI=${SNI#https://}
 SNI=${SNI#http://}
 SNI=${SNI%/}
 
-echo "==> Generating UUID..."
+info "正在生成 UUID..."
 
 UUID=$("$XRAY_BIN" uuid | xargs)
 
-echo "==> Generating Reality Key..."
+info "正在生成 Reality 密钥..."
 
 KEY_PAIR=$("$XRAY_BIN" x25519)
 
@@ -68,15 +92,15 @@ cut -d':' -f2- | \
 xargs)
 
 if [[ -z "$PRIVATE_KEY" || -z "$PUBLIC_KEY" ]]; then
-    echo "Failed to generate Reality keys."
+    error "Reality 密钥生成失败。"
     exit 1
 fi
 
-echo "==> Generating Short ID..."
+info "正在生成 Short ID..."
 
 SHORT_ID=$(openssl rand -hex 8)
 
-echo "==> Writing VLESS protocol..."
+info "正在写入 VLESS Reality 协议配置..."
 
 cat > "$PROTOCOL_CONFIG" <<EOF
 {
@@ -124,30 +148,26 @@ cat > "$PROTOCOL_CONFIG" <<EOF
 }
 EOF
 
-echo "==> Building configuration..."
+info "正在构建 Xray 配置..."
 if ! bash /root/xray-manager/config/build_config.sh; then
     exit 1
 fi
 
-echo "==> Updating firewall..."
+info "正在更新防火墙..."
 
 if command -v ufw >/dev/null 2>&1; then
     ufw status | grep -q "${PORT}/tcp" || \
     ufw allow "${PORT}/tcp" comment "Xray VLESS" >/dev/null
 fi
 
-echo "==> Starting Xray..."
+info "正在启动 Xray..."
 
 systemctl restart xray
 
 sleep 1
 
 if ! systemctl is-active --quiet xray; then
-    echo
-    echo "=========================================="
-    echo " Xray failed to start"
-    echo "=========================================="
-    echo
+    banner " Xray 启动失败" "$RED"
 
     journalctl -u xray -n 20 --no-pager
 
@@ -159,16 +179,16 @@ VLESS_LINK="vless://${UUID}@${SERVER_IP}:${PORT}?encryption=none&flow=${FLOW}&se
 echo "$VLESS_LINK" > "$CLIENT_FILE"
 
 echo
-echo "================= VLESS Link ================="
+section "VLESS Link" "$GREEN"
 echo
-echo " $VLESS_LINK"
+value "$VLESS_LINK"
 echo
-echo " Config File"
-echo " ${XRAY_DIR}/config.json"
+label " Config File"
+path_value "${XRAY_DIR}/config.json"
 echo
-echo " Protocol File"
-echo " $PROTOCOL_CONFIG"
+label " Protocol File"
+path_value "$PROTOCOL_CONFIG"
 echo
-echo " Client File"
-echo " $CLIENT_FILE"
+label " Client File"
+path_value "$CLIENT_FILE"
 echo

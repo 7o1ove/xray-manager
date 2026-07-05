@@ -2,26 +2,31 @@
 
 set -Eeuo pipefail
 
+SCRIPT_DIR="/root/xray-manager"
+
+# shellcheck source=/root/xray-manager/lib/output.sh
+source "${SCRIPT_DIR}/lib/output.sh"
+
 XRAY_DIR="/usr/local/etc/xray"
 
-echo "==> Updating package list..."
+info "Updating package list..."
 
 apt update
 
-echo "==> Installing dependencies..."
+info "Installing dependencies..."
 
 apt install -y \
     curl \
     ca-certificates
 
-echo "==> Installing Xray..."
+info "Installing Xray..."
 
 bash <(
     curl -fsSL -L \
     https://github.com/XTLS/Xray-install/raw/main/install-release.sh
 ) install
 
-echo "==> Checking Xray..."
+info "Checking Xray..."
 
 if command -v xray >/dev/null 2>&1; then
     XRAY_BIN="$(command -v xray)"
@@ -30,18 +35,18 @@ elif [[ -x /usr/local/bin/xray ]]; then
 elif [[ -x /usr/bin/xray ]]; then
     XRAY_BIN="/usr/bin/xray"
 else
-    echo "Xray installation failed."
+    error "Xray installation failed."
     exit 1
 fi
 
-echo "==> Preparing directories..."
+info "Preparing directories..."
 
 mkdir -p \
     "${XRAY_DIR}" \
     "${XRAY_DIR}/protocols" \
     "${XRAY_DIR}/client"
 
-echo "==> Creating default outbound..."
+info "Creating default outbound..."
 
 cat > "${XRAY_DIR}/outbound.json" <<EOF
 {
@@ -50,7 +55,7 @@ cat > "${XRAY_DIR}/outbound.json" <<EOF
 }
 EOF
 
-echo "==> Enabling Xray service..."
+info "Enabling Xray service..."
 
 systemctl enable xray
 
@@ -58,23 +63,19 @@ systemctl enable xray
 # Stop it now and restart after the protocol configuration is generated.
 systemctl stop xray 2>/dev/null || true
 
-echo
-echo "=========================================="
-echo "         Xray Core Installed"
-echo "=========================================="
-echo
+banner "         Xray Core Installed" "$GREEN"
 
-"$XRAY_BIN" version | head -n1
+value "$("$XRAY_BIN" version | head -n1)"
 
 echo
-echo "Binary           : $XRAY_BIN"
-echo "Config Directory : ${XRAY_DIR}"
-echo "Protocols        : ${XRAY_DIR}/protocols"
-echo "Clients          : ${XRAY_DIR}/client"
+path_kv "Binary           :" "$XRAY_BIN"
+path_kv "Config Directory :" "${XRAY_DIR}"
+path_kv "Protocols        :" "${XRAY_DIR}/protocols"
+path_kv "Clients          :" "${XRAY_DIR}/client"
 
 echo
-echo "=========================================="
-echo "Installation completed."
-echo "Xray service has been enabled."
-echo "Service will be started after protocol configuration."
-echo "=========================================="
+divider "$GREEN"
+echo -e "${GREEN}Installation completed.${RESET}"
+echo -e "${GREEN}Xray service has been enabled.${RESET}"
+echo -e "${GREEN}Service will be started after protocol configuration.${RESET}"
+divider "$GREEN"

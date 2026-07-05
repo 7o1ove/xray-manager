@@ -1,43 +1,92 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+RED="\033[31m"
+GREEN="\033[32m"
+YELLOW="\033[33m"
+CYAN="\033[36m"
+RESET="\033[0m"
+
+divider(){
+    local color="${1:-$CYAN}"
+    local char="${2:-=}"
+    local width="${3:-34}"
+    local line
+
+    line=$(printf "%${width}s" "")
+    line="${line// /$char}"
+    echo -e "${color}${line}${RESET}"
+}
+
+banner(){
+    local text="$1"
+    local color="${2:-$CYAN}"
+
+    divider "$color"
+    echo -e "${color}${text}${RESET}"
+    divider "$color"
+}
+
+info(){
+    echo -e "${CYAN}==> $1${RESET}"
+}
+
+success(){
+    echo
+    echo -e "${GREEN}$1${RESET}"
+}
+
+warning(){
+    echo
+    echo -e "${YELLOW}$1${RESET}"
+}
+
 REPO="https://github.com/7o1ove/xray-manager.git"
 INSTALL_DIR="/root/xray-manager"
+COMMAND_NAME="7o1ove"
+COMMAND_PATH="/usr/local/bin/${COMMAND_NAME}"
 
-echo "=================================="
-echo "Installing Xray Manager..."
-echo "=================================="
+banner "Installing Xray Manager..." "$CYAN"
 
-# 1. 如果目录存在就更新，不存在就clone
 if [ -d "$INSTALL_DIR/.git" ]; then
-    echo "[+] Directory exists, updating..."
+    warning "Directory exists, updating..."
 
     cd "$INSTALL_DIR"
 
-    echo "[+] Force syncing with remote..."
+    info "Force syncing with remote..."
     git fetch origin
     git reset --hard origin/main
     git clean -fd
 
 else
-    echo "[+] Cloning repo..."
+    info "Cloning repo..."
     git clone "$REPO" "$INSTALL_DIR"
 fi
 
-# 2. 进入目录
 cd "$INSTALL_DIR"
 
-# 3. 给执行权限
 chmod +x *.sh 2>/dev/null || true
 chmod +x core/*.sh 2>/dev/null || true
 chmod +x system/*.sh 2>/dev/null || true
+chmod +x config/*.sh 2>/dev/null || true
+chmod +x lib/*.sh 2>/dev/null || true
 
-# 4. 启动主程序
-echo ""
-echo "=================================="
-echo "Installation completed!"
-echo "Starting Xray Manager..."
-echo "=================================="
-echo ""
+info "Creating global command: ${COMMAND_NAME}"
+
+mkdir -p "$(dirname "$COMMAND_PATH")"
+
+cat > "$COMMAND_PATH" <<EOF
+#!/usr/bin/env bash
+cd "$INSTALL_DIR"
+exec bash "$INSTALL_DIR/xray-manager.sh" "\$@"
+EOF
+
+chmod +x "$COMMAND_PATH"
+hash -r 2>/dev/null || true
+
+banner "Installation completed!" "$GREEN"
+success "Run '${COMMAND_NAME}' next time to open Xray Manager."
+info "Starting Xray Manager..."
+echo
 
 bash xray-manager.sh </dev/tty
