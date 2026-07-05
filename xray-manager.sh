@@ -560,13 +560,6 @@ ufw_batch_delete_ip(){
     pause
 }
 
-restart_ufw(){
-    header
-    ufw --force reload
-    success "UFW 已重启。"
-    pause
-}
-
 show_ufw_status(){
     header
 
@@ -600,8 +593,7 @@ ufw_menu(){
         menu_item "4" "删除端口"
         menu_item "5" "允许 IP"
         menu_item "6" "删除 IP"
-        menu_item "7" "重启 UFW"
-        menu_item "8" "卸载 UFW"
+        menu_item "7" "卸载 UFW"
         echo
         menu_item "0" "返回"
         echo
@@ -615,8 +607,7 @@ ufw_menu(){
             4) ufw_batch_delete_port ;;
             5) ufw_batch_add_ip ;;
             6) ufw_batch_delete_ip ;;
-            7) restart_ufw ;;
-            8) uninstall_ufw ;;
+            7) uninstall_ufw ;;
             0) return ;;
             *) error "无效选择。"; pause ;;
         esac
