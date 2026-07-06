@@ -493,7 +493,7 @@ ufw_add_ip(){
     header "允许 IP"
     read -r -p "$(prompt_text "请输入允许的 IP: ")" ip
     [[ -z "$ip" ]] && error "IP 不能为空。" && pause && return
-    [[ "$ip" =~ ^[0-9]+$ ]] && error "这是端口，不是 IP。请使用“开放端口”。" && pause && return
+    [[ "$ip" =~ ^[0-9]+$ ]] && error "这是端口，不是 IP。请使用“允许端口”。" && pause && return
     ufw allow from "$ip"
     success "已允许 IP: ${ip}"
     pause
@@ -511,13 +511,13 @@ ufw_delete_ip(){
 
 ufw_add_port(){
     header "允许端口"
-    read -r -p "$(prompt_text "请输入要开放的端口: ")" port
+    read -r -p "$(prompt_text "请输入要允许的端口: ")" port
     [[ -z "$port" ]] && error "端口不能为空。" && pause && return
     valid_port "$port" || { error "端口无效。"; pause; return; }
 
     ufw allow "${port}/tcp"
     ufw allow "${port}/udp"
-    success "已开放端口: ${port}/tcp 和 ${port}/udp"
+    success "已允许端口: ${port}/tcp 和 ${port}/udp"
     pause
 }
 
