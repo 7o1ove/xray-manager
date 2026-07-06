@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-RED="\033[31m"
-GREEN="\033[32m"
-YELLOW="\033[33m"
-CYAN="\033[1;36m"
-WHITE="\033[37m"
+RED="\033[1;91m"
+GREEN="\033[1;92m"
+YELLOW="\033[1;93m"
+CYAN="\033[1;96m"
+WHITE="\033[1;97m"
 RESET="\033[0m"
 
 pause(){
