@@ -11,6 +11,7 @@ INSTALL_SCRIPT="${SCRIPT_DIR}/core/xray-core.sh"
 VLESS_SCRIPT="${SCRIPT_DIR}/core/vless-reality.sh"
 SS_SCRIPT="${SCRIPT_DIR}/core/shadowsocks.sh"
 BUILD_CONFIG_SCRIPT="${SCRIPT_DIR}/config/build_config.sh"
+XANMOD_SCRIPT="${SCRIPT_DIR}/system/xanmod-kernel.sh"
 
 XRAY_SERVICE="xray"
 XRAY_DIR="/usr/local/etc/xray"
@@ -364,6 +365,13 @@ dd_debian(){
     curl -O https://raw.githubusercontent.com/bin456789/reinstall/main/reinstall.sh
     bash reinstall.sh debian
     exit 0
+}
+
+install_xanmod_kernel(){
+    if ! run_script "$XANMOD_SCRIPT"; then
+        error "XanMod 内核安装未完成。"
+    fi
+    pause
 }
 
 show_ssh_status(){
@@ -832,6 +840,15 @@ set_timezone(){
 }
 
 configure_auto_updates(){
+    header "自动更新与自动重启"
+    warning "启用后将每天检查并安装更新；如系统要求重启，将在 03:30 自动重启。"
+
+    if ! confirm_action "确认启用自动更新与自动重启吗？"; then
+        warning "已取消。"
+        pause
+        return
+    fi
+
     info "正在配置系统自动更新..."
 
     apt update
@@ -869,15 +886,28 @@ EOF
     dpkg-reconfigure -f noninteractive unattended-upgrades >/dev/null 2>&1 || true
     systemctl daemon-reload
     systemctl enable --now apt-daily.timer apt-daily-upgrade.timer
+
+    success "自动更新已启用。"
+    kv "更新软件列表:" "03:00"
+    kv "安装系统更新:" "03:15"
+    kv "需要时重启  :" "03:30"
+    pause
 }
 
 system_tuning(){
     header "系统调优"
     info "正在应用系统调优..."
 
-    configure_auto_updates
-
     modprobe nf_conntrack 2>/dev/null || true
+    modprobe tcp_bbr 2>/dev/null || true
+    modprobe sch_fq 2>/dev/null || true
+
+    if ! sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null | grep -qw bbr; then
+        error "当前内核不支持 BBR，无法应用系统调优。"
+        pause
+        return
+    fi
+
     echo "nf_conntrack" > /etc/modules-load.d/nf_conntrack.conf
 
     cat > "$SYSCTL_CONFIG" <<'EOF'
@@ -887,9 +917,8 @@ net.ipv4.tcp_congestion_control = bbr
 net.netfilter.nf_conntrack_max = 32768
 net.netfilter.nf_conntrack_udp_timeout = 30
 net.netfilter.nf_conntrack_udp_timeout_stream = 180
-net.netfilter.nf_conntrack_tcp_timeout_established = 3600
+net.netfilter.nf_conntrack_tcp_timeout_established = 86400
 
-net.core.somaxconn = 1024
 net.core.rmem_max = 4194304
 net.core.wmem_max = 4194304
 
@@ -908,17 +937,15 @@ EOF
     kv "default_qdisc                 :" "$(sysctl -n net.core.default_qdisc 2>/dev/null || echo unknown)"
     kv "tcp_congestion_control        :" "$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo unknown)"
     kv "nf_conntrack_max              :" "$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null || echo unknown)"
-    kv "somaxconn                     :" "$(sysctl -n net.core.somaxconn 2>/dev/null || echo unknown)"
+    kv "nf_conntrack_udp_timeout      :" "$(sysctl -n net.netfilter.nf_conntrack_udp_timeout 2>/dev/null || echo unknown)"
+    kv "nf_conntrack_udp_stream       :" "$(sysctl -n net.netfilter.nf_conntrack_udp_timeout_stream 2>/dev/null || echo unknown)"
+    kv "nf_conntrack_tcp_established  :" "$(sysctl -n net.netfilter.nf_conntrack_tcp_timeout_established 2>/dev/null || echo unknown)"
     kv "rmem_max                      :" "$(sysctl -n net.core.rmem_max 2>/dev/null || echo unknown)"
     kv "wmem_max                      :" "$(sysctl -n net.core.wmem_max 2>/dev/null || echo unknown)"
     kv "tcp_fastopen                  :" "$(sysctl -n net.ipv4.tcp_fastopen 2>/dev/null || echo unknown)"
     kv "tcp_ecn                       :" "$(sysctl -n net.ipv4.tcp_ecn 2>/dev/null || echo unknown)"
     kv "tcp_mtu_probing               :" "$(sysctl -n net.ipv4.tcp_mtu_probing 2>/dev/null || echo unknown)"
     kv "swappiness                    :" "$(sysctl -n vm.swappiness 2>/dev/null || echo unknown)"
-    kv "apt update timer              :" "03:00"
-    kv "apt upgrade timer             :" "03:15"
-    kv "auto reboot if needed         :" "03:30"
-
     pause
 }
 
@@ -1210,14 +1237,16 @@ tools_menu(){
         header "工具箱"
         menu_item "1" "VPS 测试"
         menu_item "2" "DD 系统 Debian"
-        menu_item "3" "UFW 防火墙管理"
-        menu_item "4" "Fail2Ban 管理"
-        menu_item "5" "SSH 端口与密钥管理"
-        menu_item "6" "虚拟内存管理"
-        menu_item "7" "时区调整"
-        menu_item "8" "系统调优"
-        menu_item "9" "IPv6 管理"
-        menu_item "10" "MTU 设置"
+        menu_item "3" "安装 XanMod 内核（BBRv3）"
+        menu_item "4" "UFW 防火墙管理"
+        menu_item "5" "Fail2Ban 管理"
+        menu_item "6" "SSH 端口与密钥管理"
+        menu_item "7" "虚拟内存管理"
+        menu_item "8" "时区调整"
+        menu_item "9" "系统调优"
+        menu_item "10" "IPv6 管理"
+        menu_item "11" "MTU 设置"
+        menu_item "12" "自动更新与自动重启"
         echo
         menu_item "0" "返回主菜单"
         echo
@@ -1227,14 +1256,16 @@ tools_menu(){
         case "$choice" in
             1) run_vps_test ;;
             2) dd_debian ;;
-            3) ufw_menu ;;
-            4) fail2ban_menu ;;
-            5) ssh_menu ;;
-            6) swap_menu ;;
-            7) set_timezone ;;
-            8) system_tuning ;;
-            9) ipv6_menu ;;
-            10) configure_mtu ;;
+            3) install_xanmod_kernel ;;
+            4) ufw_menu ;;
+            5) fail2ban_menu ;;
+            6) ssh_menu ;;
+            7) swap_menu ;;
+            8) set_timezone ;;
+            9) system_tuning ;;
+            10) ipv6_menu ;;
+            11) configure_mtu ;;
+            12) configure_auto_updates ;;
             0) return ;;
             *) error "无效选择。"; pause ;;
         esac
