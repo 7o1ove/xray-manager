@@ -77,18 +77,10 @@ sed -i 's/原配置网卡名/实际网卡名/g' /etc/network/interfaces
 
 printf '%s\n' virtio_pci virtio_net > /etc/modules-load.d/dmit-virtio.conf
 
-ifquery 实际网卡名
+update-initramfs -u
 
-systemctl reset-failed networking
+reboot
 ```
-
-确认配置：
-
-```
-cat /etc/network/interfaces
-```
-
-配置中 `auto` 和 `iface` 后面的网卡名，都应当显示为 `实际网卡名`。
 
 ## 致谢
 
