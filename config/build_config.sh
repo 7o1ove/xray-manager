@@ -85,7 +85,7 @@ fi
 cat > "$CONFIG_FILE" <<EOF
 {
   "log": {
-    "loglevel": "warning"
+    "loglevel": "error"
   },
 
   "inbounds": [

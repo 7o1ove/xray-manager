@@ -46,7 +46,7 @@ trap 'rm -f "$CONFIG_TMP"' EXIT
 cat > "$CONFIG_TMP" <<EOF
 {
   "log": {
-    "level": "warn",
+    "level": "error",
     "timestamp": true
   },
   "inbounds": [

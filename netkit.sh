@@ -83,7 +83,7 @@ select_stable_version(){
     SELECTED_VERSION=""
 
     echo
-    read -r -p "$(prompt_text "请输入 ${core_name} 版本号（如 v1.13.12，回车使用最新稳定版）: ")" input
+    read -r -p "$(prompt_text "请输入 ${core_name} 版本号（如 v1.13.12，回车使用最新稳定版，输入 0 取消）: ")" input
     input=$(trim_edges "$input")
 
     cancel_input "$input" && return "$INPUT_CANCEL_STATUS"
@@ -960,7 +960,7 @@ show_ssh_status(){
 
 set_ssh_port(){
     header "设置 SSH 端口"
-    read -r -p "$(prompt_text "请输入新的 SSH 端口: ")" ssh_port
+    read -r -p "$(prompt_text "请输入新的 SSH 端口（输入 0 取消）: ")" ssh_port
     cancel_input "$ssh_port" && return
 
     if ! valid_port "$ssh_port"; then
@@ -999,7 +999,7 @@ set_ssh_port(){
 
 set_ssh_key(){
     header "设置 SSH 密钥"
-    read -r -p "$(prompt_text "请输入 SSH 公钥: ")" public_key
+    read -r -p "$(prompt_text "请输入 SSH 公钥（输入 0 取消）: ")" public_key
     cancel_input "$public_key" && return
 
     if [[ -z "$public_key" ]]; then
@@ -1055,7 +1055,7 @@ install_ufw(){
 
 ufw_add_ip(){
     header "允许 IP"
-    read -r -p "$(prompt_text "请输入允许的 IP: ")" ip
+    read -r -p "$(prompt_text "请输入允许的 IP（输入 0 取消）: ")" ip
     cancel_input "$ip" && return
     [[ -z "$ip" ]] && error "IP 不能为空。" && pause && return
     [[ "$ip" =~ ^[0-9]+$ ]] && error "这是端口，不是 IP。请使用“允许端口”。" && pause && return
@@ -1066,7 +1066,7 @@ ufw_add_ip(){
 
 ufw_delete_ip(){
     header "删除 IP"
-    read -r -p "$(prompt_text "请输入要删除的 IP: ")" ip
+    read -r -p "$(prompt_text "请输入要删除的 IP（输入 0 取消）: ")" ip
     cancel_input "$ip" && return
     [[ -z "$ip" ]] && error "IP 不能为空。" && pause && return
     [[ "$ip" =~ ^[0-9]+$ ]] && error "这是端口，不是 IP。请使用“删除端口”。" && pause && return
@@ -1077,7 +1077,7 @@ ufw_delete_ip(){
 
 ufw_add_port(){
     header "允许端口"
-    read -r -p "$(prompt_text "请输入要允许的端口: ")" port
+    read -r -p "$(prompt_text "请输入要允许的端口（输入 0 取消）: ")" port
     cancel_input "$port" && return
     [[ -z "$port" ]] && error "端口不能为空。" && pause && return
     valid_port "$port" || { error "端口无效。"; pause; return; }
@@ -1090,7 +1090,7 @@ ufw_add_port(){
 
 ufw_delete_port(){
     header "删除端口"
-    read -r -p "$(prompt_text "请输入要删除的端口: ")" port
+    read -r -p "$(prompt_text "请输入要删除的端口（输入 0 取消）: ")" port
     cancel_input "$port" && return
     [[ -z "$port" ]] && error "端口不能为空。" && pause && return
     valid_port "$port" || { error "端口无效。"; pause; return; }
@@ -1106,7 +1106,7 @@ ufw_batch_add_port(){
     local input
     local port
 
-    read -r -p "$(prompt_text "请输入要允许的端口（多个用空格分隔）: ")" input
+    read -r -p "$(prompt_text "请输入要允许的端口（多个用空格分隔，输入 0 取消）: ")" input
     cancel_input "$input" && return
     [[ -z "$input" ]] && error "端口不能为空。" && pause && return
     reject_comma_separator "$input" || return
@@ -1258,7 +1258,7 @@ ufw_batch_add_ip(){
     local input
     local ip
 
-    read -r -p "$(prompt_text "请输入要允许的 IP/CIDR（多个用空格分隔）: ")" input
+    read -r -p "$(prompt_text "请输入要允许的 IP/CIDR（多个用空格分隔，输入 0 取消）: ")" input
     cancel_input "$input" && return
     [[ -z "$input" ]] && error "IP 不能为空。" && pause && return
     reject_comma_separator "$input" || return
@@ -1280,7 +1280,7 @@ ufw_batch_delete_ip(){
     local input
     local ip
 
-    read -r -p "$(prompt_text "请输入要删除的 IP/CIDR（多个用空格分隔）: ")" input
+    read -r -p "$(prompt_text "请输入要删除的 IP/CIDR（多个用空格分隔，输入 0 取消）: ")" input
     cancel_input "$input" && return
     [[ -z "$input" ]] && error "IP 不能为空。" && pause && return
     reject_comma_separator "$input" || return
@@ -1399,7 +1399,7 @@ fail2ban_unban_ip(){
     header "解封 SSHD IP"
     local ip
 
-    read -r -p "$(prompt_text "请输入要解封的 IP: ")" ip
+    read -r -p "$(prompt_text "请输入要解封的 IP（输入 0 取消）: ")" ip
     cancel_input "$ip" && return
 
     if [[ -z "$ip" ]]; then
@@ -1832,7 +1832,7 @@ configure_mtu(){
         label "Current MTU:"
         value "$current_mtu"
         echo
-        read -r -p "$(prompt_text "Enter MTU [default: ${MTU_VALUE}]: ")" new_mtu
+        read -r -p "$(prompt_text "Enter MTU [default: ${MTU_VALUE}, 0 to cancel]: ")" new_mtu
         cancel_input "$new_mtu" && return
         new_mtu=${new_mtu:-$MTU_VALUE}
 

@@ -55,7 +55,7 @@ SERVER_IP=$(
     echo "Unknown"
 )
 
-read -r -p "$(prompt_text "端口（留空随机）: ")" PORT
+read -r -p "$(prompt_text "端口（留空随机，输入 0 取消）: ")" PORT
 cancel_input "$PORT" && exit "$INPUT_CANCEL_STATUS"
 
 PORT=$(resolve_port "$PORT") || exit 1
