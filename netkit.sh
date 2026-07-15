@@ -58,16 +58,14 @@ run_script_and_pause(){
 
 SELECTED_VERSION=""
 
-select_stable_version(){
-    local core_name="$1"
-    local repository="$2"
+select_mihomo_version(){
     local input
     local release_json
 
     SELECTED_VERSION=""
 
     echo
-    read -r -p "$(prompt_text "请输入 ${core_name} 正式稳定版版本号（回车使用最新稳定版，输入 0 取消）: ")" input
+    read -r -p "$(prompt_text "请输入 Mihomo 正式稳定版版本号（回车使用最新稳定版，输入 0 取消）: ")" input
     input=$(trim_edges "$input")
 
     cancel_input "$input" && return "$INPUT_CANCEL_STATUS"
@@ -84,18 +82,18 @@ select_stable_version(){
         return 1
     fi
 
-    info "正在验证 ${core_name} ${input}..."
+    info "正在验证 Mihomo ${input}..."
 
     if ! release_json=$(curl -fsSL -L \
         -H "Accept: application/vnd.github+json" \
-        "https://api.github.com/repos/${repository}/releases/tags/${input}"); then
-        error "未找到 ${core_name} ${input}，请检查版本号。"
+        "https://api.github.com/repos/MetaCubeX/mihomo/releases/tags/${input}"); then
+        error "未找到 Mihomo ${input}，请检查版本号。"
         return 1
     fi
 
     if ! grep -q '"prerelease":[[:space:]]*false' <<< "$release_json" || \
        ! grep -q '"draft":[[:space:]]*false' <<< "$release_json"; then
-        error "${core_name} ${input} 不是正式稳定版，已拒绝安装。"
+        error "Mihomo ${input} 不是正式稳定版，已拒绝安装。"
         return 1
     fi
 
@@ -257,7 +255,7 @@ install_mihomo(){
     local selection_status=0
 
     header "安装 / 更新 Mihomo"
-    select_stable_version "Mihomo" "MetaCubeX/mihomo" || selection_status=$?
+    select_mihomo_version || selection_status=$?
     [[ "$selection_status" -eq "$INPUT_CANCEL_STATUS" ]] && return
     if [[ "$selection_status" -ne 0 ]]; then
         pause
