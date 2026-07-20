@@ -306,8 +306,31 @@ uninstall_mihomo_shadowsocks(){
     pause
 }
 
-show_mihomo_status(){
-    header "Mihomo 状态"
+show_mihomo_logs(){
+    header "Mihomo 日志"
+
+    if ! command -v journalctl >/dev/null 2>&1; then
+        error "当前系统不支持 journalctl，无法查看 Mihomo 日志。"
+        pause
+        return
+    fi
+
+    if ! command -v mihomo >/dev/null 2>&1; then
+        warning "未检测到 Mihomo，以下可能没有可用日志。"
+        echo
+    fi
+
+    section "最近 100 条日志" "$YELLOW"
+    echo
+    if ! journalctl -u "$MIHOMO_SERVICE" -n 100 --no-pager; then
+        error "Mihomo 日志读取失败。"
+    fi
+
+    pause
+}
+
+show_mihomo_core(){
+    header "Mihomo 核心"
 
     local status
     status=$(systemctl is-active "$MIHOMO_SERVICE" 2>/dev/null || true)
@@ -1485,13 +1508,14 @@ mihomo_menu(){
     while true; do
         header "Mihomo"
         menu_item "1" "安装 / 更新 Mihomo"
-        menu_item "2" "查看 Mihomo 状态"
-        menu_item "3" "安装 VLESS + TCP + XTLS Vision + REALITY"
-        menu_item "4" "卸载 VLESS + TCP + XTLS Vision + REALITY"
-        menu_item "5" "安装 Shadowsocks"
-        menu_item "6" "卸载 Shadowsocks"
-        menu_item "7" "重启 Mihomo"
-        menu_item "8" "卸载 Mihomo"
+        menu_item "2" "查看 Mihomo 核心"
+        menu_item "3" "查看 Mihomo 日志"
+        menu_item "4" "安装 VLESS + TCP + XTLS Vision + REALITY"
+        menu_item "5" "卸载 VLESS + TCP + XTLS Vision + REALITY"
+        menu_item "6" "安装 Shadowsocks"
+        menu_item "7" "卸载 Shadowsocks"
+        menu_item "8" "重启 Mihomo"
+        menu_item "9" "卸载 Mihomo"
         echo
         menu_item "0" "返回主菜单"
         echo
@@ -1501,13 +1525,14 @@ mihomo_menu(){
 
         case "$choice" in
             1) install_mihomo ;;
-            2) show_mihomo_status ;;
-            3) configure_mihomo_vless ;;
-            4) uninstall_mihomo_vless ;;
-            5) configure_mihomo_shadowsocks ;;
-            6) uninstall_mihomo_shadowsocks ;;
-            7) restart_mihomo ;;
-            8) uninstall_mihomo ;;
+            2) show_mihomo_core ;;
+            3) show_mihomo_logs ;;
+            4) configure_mihomo_vless ;;
+            5) uninstall_mihomo_vless ;;
+            6) configure_mihomo_shadowsocks ;;
+            7) uninstall_mihomo_shadowsocks ;;
+            8) restart_mihomo ;;
+            9) uninstall_mihomo ;;
             0) return ;;
             *) error "无效选择。"; pause ;;
         esac
