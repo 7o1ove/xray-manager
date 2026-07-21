@@ -10,7 +10,7 @@ source "${SCRIPT_DIR}/lib/output.sh"
 MIHOMO_INSTALL_SCRIPT="${SCRIPT_DIR}/core/mihomo-core.sh"
 MIHOMO_VLESS_SCRIPT="${SCRIPT_DIR}/core/mihomo-vless-reality.sh"
 MIHOMO_SS_SCRIPT="${SCRIPT_DIR}/core/mihomo-shadowsocks.sh"
-MIHOMO_HY2_CERT_SCRIPT="${SCRIPT_DIR}/core/mihomo-hysteria2-cert.sh"
+TLS_CERT_SCRIPT="${SCRIPT_DIR}/core/tls-certificate.sh"
 MIHOMO_BUILD_CONFIG_SCRIPT="${SCRIPT_DIR}/config/mihomo-build-config.sh"
 XANMOD_SCRIPT="${SCRIPT_DIR}/system/xanmod-kernel.sh"
 
@@ -281,8 +281,12 @@ configure_mihomo_shadowsocks(){
     run_script_and_pause "$MIHOMO_SS_SCRIPT"
 }
 
-manage_mihomo_hysteria2_certificate(){
-    run_script_and_pause "$MIHOMO_HY2_CERT_SCRIPT"
+manage_tls_certificate(){
+    run_script_and_pause "$TLS_CERT_SCRIPT"
+}
+
+view_tls_certificate(){
+    run_script_and_pause "$TLS_CERT_SCRIPT" --status
 }
 
 uninstall_mihomo_vless(){
@@ -1506,7 +1510,7 @@ tools_menu(){
         menu_item "10" "IPv6 管理"
         menu_item "11" "MTU 设置"
         menu_item "12" "自动更新与自动重启"
-        menu_item "13" "Mihomo Hysteria2 TLS 证书管理"
+        menu_item "13" "TLS 证书申请与管理"
         echo
         menu_item "0" "返回主菜单"
         echo
@@ -1526,7 +1530,7 @@ tools_menu(){
             10) ipv6_menu ;;
             11) configure_mtu ;;
             12) configure_auto_updates ;;
-            13) manage_mihomo_hysteria2_certificate ;;
+            13) manage_tls_certificate ;;
             0) return ;;
             *) error "无效选择。"; pause ;;
         esac
@@ -1539,7 +1543,7 @@ mihomo_menu(){
         menu_item "1" "安装 / 更新 Mihomo"
         menu_item "2" "查看 Mihomo 核心"
         menu_item "3" "查看 Mihomo 日志"
-        menu_item "4" "管理 Hysteria2 TLS 证书"
+        menu_item "4" "查看 TLS 证书"
         menu_item "5" "安装 VLESS + TCP + XTLS Vision + REALITY"
         menu_item "6" "卸载 VLESS + TCP + XTLS Vision + REALITY"
         menu_item "7" "安装 Shadowsocks"
@@ -1557,7 +1561,7 @@ mihomo_menu(){
             1) install_mihomo ;;
             2) show_mihomo_core ;;
             3) show_mihomo_logs ;;
-            4) manage_mihomo_hysteria2_certificate ;;
+            4) view_tls_certificate ;;
             5) configure_mihomo_vless ;;
             6) uninstall_mihomo_vless ;;
             7) configure_mihomo_shadowsocks ;;

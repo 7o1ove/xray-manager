@@ -7,6 +7,15 @@ SCRIPT_DIR="/root/netkit"
 # shellcheck source=/root/netkit/lib/output.sh
 source "${SCRIPT_DIR}/lib/output.sh"
 
+header(){
+    local title="${1:-TLS 证书申请与管理}"
+
+    echo
+    divider "$CYAN"
+    center_line "$title" "$WHITE"
+    divider "$CYAN"
+}
+
 ACME_HOME="/root/.acme.sh"
 ACME_SH="${ACME_HOME}/acme.sh"
 CF_API_BASE="https://api.cloudflare.com/client/v4"
@@ -25,11 +34,17 @@ CF_HTTP_CODE=""
 CF_TEST_RECORD_ID=""
 INSTALLER_FILE=""
 ARCHIVE_DIR=""
+ERROR_REPORTED=false
 
 on_error(){
     local status="$1"
     local line="$2"
     local command="$3"
+
+    if $ERROR_REPORTED; then
+        return 0
+    fi
+    ERROR_REPORTED=true
 
     if [[ -n "${CF_TOKEN:-}" ]]; then
         command="${command//"$CF_TOKEN"/[REDACTED]}"
@@ -150,7 +165,7 @@ prompt_domain(){
     local input
 
     while true; do
-        read -r -p "$(prompt_text "请输入 Hysteria2 完整域名（例如 hy.example.com，输入 0 取消）: ")" input
+        read -r -p "$(prompt_text "请输入证书完整域名（例如 hy.example.com，输入 0 取消）: ")" input
         input=$(trim_edges "$input")
         input="${input%.}"
         input="${input,,}"
@@ -515,7 +530,7 @@ show_certificate_summary(){
     not_after=$(openssl x509 -in "$CERT_FILE" -noout -enddate | cut -d= -f2-)
     remaining=$(certificate_remaining_days)
 
-    section "当前 Hysteria2 TLS 证书" "$YELLOW"
+    section "当前 TLS 证书" "$YELLOW"
     echo
     kv "域名       :" "${domain:-未知}"
     kv "签发者     :" "$issuer"
@@ -711,7 +726,7 @@ existing_certificate_menu(){
 
     domain=$(current_certificate_domain)
     while true; do
-        header "Hysteria2 TLS 证书管理"
+        header "TLS 证书申请与管理"
         show_certificate_summary || true
         echo
         menu_item "1" "保留并重新部署现有证书"
@@ -760,8 +775,29 @@ existing_certificate_menu(){
     done
 }
 
+show_certificate_status(){
+    header "TLS 证书状态"
+
+    if ! certificate_exists; then
+        warning "未检测到已部署的 TLS 证书。"
+        path_kv "证书文件   :" "$CERT_FILE"
+        path_kv "私钥文件   :" "$KEY_FILE"
+        show_cron_status
+        return 0
+    fi
+
+    verify_certificate
+    show_cron_status
+}
+
 main(){
     check_root
+
+    if [[ "${1:-}" == "--status" ]]; then
+        show_certificate_status
+        return 0
+    fi
+
     install_dependencies
     install_acme
     CF_RESPONSE_FILE=$(mktemp /tmp/netkit-cf-response.XXXXXX)
@@ -769,7 +805,7 @@ main(){
     if certificate_exists; then
         existing_certificate_menu
     else
-        header "申请 Hysteria2 TLS 证书"
+        header "申请 TLS 证书"
         configure_new_certificate
     fi
 }
