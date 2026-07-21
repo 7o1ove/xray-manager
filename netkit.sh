@@ -22,7 +22,8 @@ MIHOMO_PROTOCOL_DIR="${MIHOMO_DIR}/protocols"
 MIHOMO_CLIENT_DIR="${MIHOMO_DIR}/client"
 MIHOMO_HY2_HOP_SERVICE="mihomo-hysteria2-port-hopping.service"
 MIHOMO_HY2_HOP_START="20000"
-MIHOMO_HY2_HOP_END="50000"
+MIHOMO_HY2_HOP_END="49999"
+MIHOMO_HY2_HOP_STATE="${MIHOMO_DIR}/hysteria2-port-hopping.range"
 IPV6_SYSCTL_CONFIG="/etc/sysctl.d/99-netkit-ipv6.conf"
 SYSCTL_CONFIG="/etc/sysctl.d/99-z-bbr.conf"
 SWAPFILE="/swapfile"
@@ -320,18 +321,39 @@ manage_tls_certificate(){
 
 remove_mihomo_hysteria2_port_hopping(){
     local listener_port="${1:-${MIHOMO_HY2_HOP_START}}"
+    local hop_start="${MIHOMO_HY2_HOP_START}"
+    local hop_end="${MIHOMO_HY2_HOP_END}"
+    local range=""
+    local service_values=""
+    local service_port=""
+
+    if [[ -r "${MIHOMO_HY2_HOP_STATE}" ]]; then
+        range=$(tr -d '\r\n' < "${MIHOMO_HY2_HOP_STATE}")
+        if [[ "${range}" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+            hop_start="${BASH_REMATCH[1]}"
+            hop_end="${BASH_REMATCH[2]}"
+        fi
+    elif [[ -r "/etc/systemd/system/${MIHOMO_HY2_HOP_SERVICE}" ]]; then
+        service_values=$(sed -nE 's#^ExecStart=.*/mihomo-hysteria2-port-hopping\.sh start ([0-9]+) ([0-9]+) ([0-9]+)$#\1 \2 \3#p' \
+            "/etc/systemd/system/${MIHOMO_HY2_HOP_SERVICE}" | head -n1)
+        if [[ -n "${service_values}" ]]; then
+            read -r hop_start hop_end service_port <<< "${service_values}"
+        fi
+    fi
 
     systemctl disable --now "${MIHOMO_HY2_HOP_SERVICE}" >/dev/null 2>&1 || true
     if [[ -r "${MIHOMO_HY2_HOP_SCRIPT}" ]]; then
         bash "${MIHOMO_HY2_HOP_SCRIPT}" stop \
-            "${MIHOMO_HY2_HOP_START}" "${MIHOMO_HY2_HOP_END}" "${listener_port}" \
+            "${hop_start}" "${hop_end}" "${listener_port}" \
             >/dev/null 2>&1 || true
     fi
     rm -f "/etc/systemd/system/${MIHOMO_HY2_HOP_SERVICE}" \
-        "/etc/systemd/system/mihomo.service.d/hysteria2-port-hopping.conf"
+        "/etc/systemd/system/mihomo.service.d/hysteria2-port-hopping.conf" \
+        "${MIHOMO_HY2_HOP_STATE}"
     rmdir /etc/systemd/system/mihomo.service.d >/dev/null 2>&1 || true
     systemctl daemon-reload >/dev/null 2>&1 || true
-    ufw --force delete allow "${MIHOMO_HY2_HOP_START}:${MIHOMO_HY2_HOP_END}/udp" >/dev/null 2>&1 || true
+    ufw --force delete allow "${hop_start}:${hop_end}/udp" >/dev/null 2>&1 || true
+    ufw --force delete allow "20000:50000/udp" >/dev/null 2>&1 || true
     remove_ufw_port_rule "${listener_port}" udp
 }
 
@@ -422,7 +444,7 @@ show_mihomo_core(){
     section "协议配置" "$YELLOW"
     echo
     if [[ -f "${MIHOMO_CLIENT_DIR}/hysteria2.txt" ]]; then
-        kv "Hysteria2       :" "已配置（UDP 跳跃端口 20000-50000）"
+        kv "Hysteria2       :" "已配置（UDP 跳跃端口位于 20000-49999）"
     else
         kv "Hysteria2       :" "未配置"
     fi

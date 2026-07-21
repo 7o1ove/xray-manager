@@ -50,9 +50,9 @@ SERVER_IP=$(
     echo "Unknown"
 )
 
-read -r -p "$(prompt_text "端口（1-20000，留空随机，输入 0 取消）: ")" PORT
+read -r -p "$(prompt_text "端口（1-19999，留空随机，输入 0 取消）: ")" PORT
 cancel_input "$PORT" && exit "$INPUT_CANCEL_STATUS"
-PORT=$(resolve_port "$PORT" 1 20000) || exit 1
+PORT=$(resolve_port "$PORT" 1 19999) || exit 1
 
 PASSWORD=$(openssl rand -base64 32 | tr -d '\n')
 if [[ -z "$PASSWORD" ]]; then

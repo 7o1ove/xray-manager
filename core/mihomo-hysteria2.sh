@@ -18,14 +18,18 @@ HOP_SERVICE="mihomo-hysteria2-port-hopping.service"
 HOP_SERVICE_FILE="/etc/systemd/system/${HOP_SERVICE}"
 HOP_DROPIN_DIR="/etc/systemd/system/mihomo.service.d"
 HOP_DROPIN_FILE="${HOP_DROPIN_DIR}/hysteria2-port-hopping.conf"
+HOP_STATE_FILE="${MIHOMO_DIR}/hysteria2-port-hopping.range"
 CERT_FILE="${MIHOMO_DIR}/certs/fullchain.pem"
 KEY_FILE="${MIHOMO_DIR}/certs/private.key"
 DOMAIN_FILE="${MIHOMO_DIR}/certs/domain"
 USERNAME="netkit"
 DEFAULT_CLIENT_UP_MBPS="100"
 DEFAULT_CLIENT_DOWN_MBPS="100"
-HOP_START="20000"
-HOP_END="50000"
+DEFAULT_MASQUERADE_URL="https://www.bing.com"
+HOP_MIN="20000"
+HOP_MAX="49999"
+HOP_START="${HOP_MIN}"
+HOP_END="${HOP_MAX}"
 HOP_INTERVAL="30"
 
 PORT=""
@@ -33,11 +37,17 @@ CLIENT_UP_MBPS=""
 CLIENT_DOWN_MBPS=""
 CLIENT_BANDWIDTH_VALUE=""
 PASSWORD=""
+HY2_MODE="standard"
+MASQUERADE_URL=""
+OBFS_PASSWORD=""
 DOMAIN=""
 SERVER_IP=""
 OLD_PORT=""
+OLD_HOP_START=""
+OLD_HOP_END=""
 PROTOCOL_BACKUP=""
 CONFIG_BACKUP=""
+SERVICE_BACKUP=""
 UFW_RULE_ADDED=0
 HAD_OLD_CONFIG=0
 
@@ -154,24 +164,46 @@ show_dns_warning() {
     fi
 }
 
-select_listener_port() {
-    if [[ -n "${OLD_PORT}" ]]; then
-        if ! valid_port "${OLD_PORT}" || (( OLD_PORT < HOP_START || OLD_PORT > HOP_END )); then
-            err "现有 Hysteria2 监听端口不在 ${HOP_START}-${HOP_END} 范围内：${OLD_PORT}"
-            echo "请先卸载旧的 Hysteria2 配置，再重新安装。"
-            exit 1
-        fi
-        PORT="${OLD_PORT}"
-        info "沿用现有 Hysteria2 监听端口：${PORT}"
-        return 0
+prompt_hop_range() {
+    local input=""
+    local default_range="${HOP_MIN}-${HOP_MAX}"
+    local candidate_start candidate_end
+
+    if [[ -n "${OLD_HOP_START}" && -n "${OLD_HOP_END}" ]] &&
+       (( OLD_HOP_START >= HOP_MIN && OLD_HOP_END <= HOP_MAX )); then
+        default_range="${OLD_HOP_START}-${OLD_HOP_END}"
     fi
 
-    PORT="${HOP_START}"
-    if port_in_use "${PORT}"; then
-        err "Hysteria2 实际监听端口 ${PORT} 已被占用"
-        echo "请先调整占用该端口的服务；HY2 跳跃范围固定为 ${HOP_START}-${HOP_END}。"
-        exit 1
-    fi
+    while true; do
+        read -r -p "请输入 HY2 跳跃端口范围（${HOP_MIN}-${HOP_MAX} 内，默认 ${default_range}，输入 0 取消）: " input
+        input="${input:-${default_range}}"
+        if [[ "${input}" == "0" ]]; then
+            err "操作已取消"
+            exit 1
+        fi
+
+        if [[ ! "${input}" =~ ^([0-9]{1,5})-([0-9]{1,5})$ ]]; then
+            warn "格式无效，请使用“起始端口-结束端口”，例如 22000-32000"
+            continue
+        fi
+
+        candidate_start=$((10#${BASH_REMATCH[1]}))
+        candidate_end=$((10#${BASH_REMATCH[2]}))
+        if (( candidate_start < HOP_MIN || candidate_end > HOP_MAX || candidate_start >= candidate_end )); then
+            warn "跳跃范围必须位于 ${HOP_MIN}-${HOP_MAX} 内，并且起始端口小于结束端口"
+            continue
+        fi
+
+        if [[ "${candidate_start}" != "${OLD_PORT}" ]] && port_in_use "${candidate_start}"; then
+            warn "实际监听端口 ${candidate_start} 已被占用，请更换跳跃范围"
+            continue
+        fi
+
+        HOP_START="${candidate_start}"
+        HOP_END="${candidate_end}"
+        PORT="${HOP_START}"
+        return 0
+    done
 }
 
 prompt_client_bandwidth_value() {
@@ -201,11 +233,97 @@ prompt_client_bandwidth() {
     CLIENT_DOWN_MBPS="${CLIENT_BANDWIDTH_VALUE}"
 }
 
+prompt_yes_no() {
+    local message="$1"
+    local answer=""
+
+    while true; do
+        read -r -p "${message} [y/N]: " answer
+        case "${answer}" in
+            ""|[Nn]) return 1 ;;
+            [Yy]) return 0 ;;
+            *) warn "请输入 y 或 n，直接回车默认为 n" ;;
+        esac
+    done
+}
+
+prompt_hy2_mode() {
+    local target=""
+
+    echo
+    echo "Hysteria2 流量模式："
+    echo "1. 标准 HTTP/3，返回 404（默认）"
+    echo "2. HTTP/3 网站伪装（默认目标 ${DEFAULT_MASQUERADE_URL}）"
+    echo "3. Salamander 混淆"
+    echo
+
+    if prompt_yes_no "是否启用 HTTP/3 网站伪装？"; then
+        while true; do
+            read -r -p "请输入伪装网站（留空默认 ${DEFAULT_MASQUERADE_URL}，输入 0 取消）: " target
+            target="${target:-${DEFAULT_MASQUERADE_URL}}"
+            if [[ "${target}" == "0" ]]; then
+                err "操作已取消"
+                exit 1
+            fi
+            if [[ "${target}" =~ ^https?://[^[:space:]]+$ ]]; then
+                HY2_MODE="masquerade"
+                MASQUERADE_URL="${target}"
+                info "已选择 HTTP/3 网站伪装：${MASQUERADE_URL}"
+                return 0
+            fi
+            warn "伪装网站必须是有效的 http:// 或 https:// 地址"
+        done
+    fi
+
+    if prompt_yes_no "是否启用 Salamander 混淆？"; then
+        HY2_MODE="salamander"
+        OBFS_PASSWORD="$(openssl rand -hex 32)"
+        if [[ -z "${OBFS_PASSWORD}" ]]; then
+            err "Salamander 混淆密码生成失败"
+            exit 1
+        fi
+        info "已选择 Salamander 混淆"
+    else
+        HY2_MODE="standard"
+        info "已选择标准 HTTP/3 模式（探测返回 404）"
+    fi
+}
+
+read_old_hop_range() {
+    local range=""
+    local service_values=""
+    local service_port=""
+
+    if [[ -r "${HOP_STATE_FILE}" ]]; then
+        range="$(tr -d '\r\n' < "${HOP_STATE_FILE}")"
+    elif [[ -r "${CLIENT_FILE}" ]]; then
+        range="$(sed -nE 's/^[[:space:]]*ports:[[:space:]]*"?([0-9]+-[0-9]+)"?[[:space:]]*$/\1/p' "${CLIENT_FILE}" | head -n1)"
+    fi
+
+    if [[ "${range}" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+        OLD_HOP_START="${BASH_REMATCH[1]}"
+        OLD_HOP_END="${BASH_REMATCH[2]}"
+        return 0
+    fi
+
+    if [[ -r "${HOP_SERVICE_FILE}" ]]; then
+        service_values="$(sed -nE 's#^ExecStart=.*/mihomo-hysteria2-port-hopping\.sh start ([0-9]+) ([0-9]+) ([0-9]+)$#\1 \2 \3#p' "${HOP_SERVICE_FILE}" | head -n1)"
+        if [[ -n "${service_values}" ]]; then
+            read -r OLD_HOP_START OLD_HOP_END service_port <<< "${service_values}"
+            return 0
+        fi
+    fi
+
+    OLD_HOP_START="20000"
+    OLD_HOP_END="50000"
+}
+
 read_old_port() {
     if [[ -f "${PROTOCOL_CONFIG}" ]]; then
         HAD_OLD_CONFIG=1
         OLD_PORT="$(yaml_number_field "${PROTOCOL_CONFIG}" "port" || true)"
         [[ -n "${OLD_PORT}" ]] || { err "无法读取现有 Hysteria2 监听端口"; exit 1; }
+        read_old_hop_range
     fi
 }
 
@@ -218,13 +336,19 @@ backup_configs() {
         CONFIG_BACKUP="$(mktemp /tmp/netkit-mihomo-config.XXXXXX.yaml)"
         cp -a "${MIHOMO_CONFIG}" "${CONFIG_BACKUP}"
     fi
+    if [[ -f "${HOP_SERVICE_FILE}" ]]; then
+        SERVICE_BACKUP="$(mktemp /tmp/netkit-hysteria2-service.XXXXXX)"
+        cp -a "${HOP_SERVICE_FILE}" "${SERVICE_BACKUP}"
+    fi
 }
 
 write_protocol_config() {
-    local yaml_password yaml_cert yaml_key
+    local yaml_password yaml_cert yaml_key yaml_masquerade yaml_obfs_password
     yaml_password="$(yaml_quote "${PASSWORD}")"
     yaml_cert="$(yaml_quote "${CERT_FILE}")"
     yaml_key="$(yaml_quote "${KEY_FILE}")"
+    yaml_masquerade="$(yaml_quote "${MASQUERADE_URL}")"
+    yaml_obfs_password="$(yaml_quote "${OBFS_PASSWORD}")"
 
     umask 077
     mkdir -p "${MIHOMO_DIR}/protocols" "${MIHOMO_DIR}/client"
@@ -236,7 +360,19 @@ write_protocol_config() {
         echo "    listen: 0.0.0.0"
         echo "    users:"
         echo "      ${USERNAME}: ${yaml_password}"
-        echo "    masquerade: \"\""
+        case "${HY2_MODE}" in
+            masquerade)
+                echo "    masquerade: ${yaml_masquerade}"
+                ;;
+            salamander)
+                echo "    obfs: salamander"
+                echo "    obfs-password: ${yaml_obfs_password}"
+                echo "    masquerade: \"\""
+                ;;
+            *)
+                echo "    masquerade: \"\""
+                ;;
+        esac
         echo "    alpn:"
         echo "      - h3"
         echo "    certificate: ${yaml_cert}"
@@ -247,6 +383,7 @@ write_protocol_config() {
 
 install_port_hopping() {
     info "配置 Hysteria2 UDP 跳跃端口 ${HOP_START}-${HOP_END}..."
+    systemctl stop "${HOP_SERVICE}" >/dev/null 2>&1 || true
     mkdir -p "${HOP_DROPIN_DIR}"
 
     cat > "${HOP_SERVICE_FILE}" <<EOF
@@ -286,6 +423,19 @@ remove_port_hopping() {
     systemctl daemon-reload >/dev/null 2>&1 || true
 }
 
+restore_old_port_hopping() {
+    if [[ -z "${SERVICE_BACKUP}" || ! -f "${SERVICE_BACKUP}" ]]; then
+        remove_port_hopping
+        return 0
+    fi
+
+    systemctl stop "${HOP_SERVICE}" >/dev/null 2>&1 || true
+    cp -a "${SERVICE_BACKUP}" "${HOP_SERVICE_FILE}"
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    systemctl enable "${HOP_SERVICE}" >/dev/null 2>&1 || true
+    systemctl restart "${HOP_SERVICE}" >/dev/null 2>&1 || true
+}
+
 remove_hop_ufw_rule() {
     command -v ufw >/dev/null 2>&1 || return 0
     ufw --force delete allow "${HOP_START}:${HOP_END}/udp" >/dev/null 2>&1 || true
@@ -309,7 +459,11 @@ rollback() {
     if (( UFW_RULE_ADDED == 1 )); then
         remove_hop_ufw_rule
     fi
-    (( HAD_OLD_CONFIG == 1 )) || remove_port_hopping
+    if (( HAD_OLD_CONFIG == 1 )); then
+        restore_old_port_hopping
+    else
+        remove_port_hopping
+    fi
 
     systemctl restart mihomo >/dev/null 2>&1 || true
 }
@@ -350,14 +504,35 @@ apply_config() {
 }
 
 remove_old_firewall_rule() {
-    [[ -n "${OLD_PORT}" ]] && remove_ufw_port_rule "${OLD_PORT}" "udp"
+    if [[ -n "${OLD_PORT}" ]]; then
+        remove_ufw_port_rule "${OLD_PORT}" "udp"
+    fi
+    if [[ -n "${OLD_HOP_START}" && -n "${OLD_HOP_END}" ]] &&
+       [[ "${OLD_HOP_START}-${OLD_HOP_END}" != "${HOP_START}-${HOP_END}" ]] &&
+       command -v ufw >/dev/null 2>&1; then
+        ufw --force delete allow "${OLD_HOP_START}:${OLD_HOP_END}/udp" >/dev/null 2>&1 || true
+    fi
+}
+
+write_hop_state() {
+    local temp_file="${HOP_STATE_FILE}.tmp.$$"
+
+    umask 077
+    printf '%s-%s\n' "${HOP_START}" "${HOP_END}" > "${temp_file}"
+    chmod 600 "${temp_file}"
+    mv -f "${temp_file}" "${HOP_STATE_FILE}"
 }
 
 write_client_info() {
-    local yaml_domain yaml_password hy2_link
+    local yaml_domain yaml_password yaml_obfs_password hy2_query hy2_link
     yaml_domain="$(yaml_quote "${DOMAIN}")"
     yaml_password="$(yaml_quote "${PASSWORD}")"
-    hy2_link="hysteria2://${PASSWORD}@${DOMAIN}:${HOP_START}-${HOP_END}/?sni=${DOMAIN}&insecure=0"
+    yaml_obfs_password="$(yaml_quote "${OBFS_PASSWORD}")"
+    hy2_query="sni=${DOMAIN}&insecure=0"
+    if [[ "${HY2_MODE}" == "salamander" ]]; then
+        hy2_query+="&obfs=salamander&obfs-password=${OBFS_PASSWORD}"
+    fi
+    hy2_link="hysteria2://${PASSWORD}@${DOMAIN}:${HOP_START}-${HOP_END}/?${hy2_query}"
 
     umask 077
     {
@@ -375,6 +550,10 @@ write_client_info() {
         echo "  up: \"${CLIENT_UP_MBPS} Mbps\""
         echo "  down: \"${CLIENT_DOWN_MBPS} Mbps\""
         echo "  sni: ${yaml_domain}"
+        if [[ "${HY2_MODE}" == "salamander" ]]; then
+            echo "  obfs: salamander"
+            echo "  obfs-password: ${yaml_obfs_password}"
+        fi
         echo "  skip-cert-verify: false"
         echo "  alpn:"
         echo "    - h3"
@@ -385,10 +564,12 @@ write_client_info() {
 cleanup_backups() {
     [[ -z "${PROTOCOL_BACKUP}" ]] || rm -f "${PROTOCOL_BACKUP}"
     [[ -z "${CONFIG_BACKUP}" ]] || rm -f "${CONFIG_BACKUP}"
+    [[ -z "${SERVICE_BACKUP}" ]] || rm -f "${SERVICE_BACKUP}"
 }
 
 show_result() {
     local hy2_link
+    local mode_text=""
     hy2_link="$(sed -n '/^Hysteria2 Link:$/ {n;p;q;}' "${CLIENT_FILE}")"
 
     banner "Mihomo Hysteria2 安装成功" "$GREEN"
@@ -398,6 +579,21 @@ show_result() {
     kv "Listen Port  :" "${PORT}/UDP"
     kv "Hop Interval :" "${HOP_INTERVAL} 秒"
     kv "Password     :" "${PASSWORD}"
+    case "${HY2_MODE}" in
+        masquerade)
+            mode_text="HTTP/3 网站伪装"
+            kv "Mode         :" "${mode_text}"
+            kv "Masquerade   :" "${MASQUERADE_URL}"
+            ;;
+        salamander)
+            mode_text="Salamander 混淆"
+            kv "Mode         :" "${mode_text}"
+            kv "Obfs Password:" "${OBFS_PASSWORD}"
+            ;;
+        *)
+            kv "Mode         :" "标准 HTTP/3（返回 404）"
+            ;;
+    esac
     kv "Client Upload  :" "${CLIENT_UP_MBPS} Mbps"
     kv "Client Download:" "${CLIENT_DOWN_MBPS} Mbps"
     echo
@@ -428,13 +624,15 @@ main() {
     get_server_ip
     show_dns_warning
     read_old_port
-    select_listener_port
+    prompt_hop_range
     prompt_client_bandwidth
+    prompt_hy2_mode
     PASSWORD="$(openssl rand -hex 32)"
     backup_configs
     write_protocol_config
     apply_config
     remove_old_firewall_rule
+    write_hop_state
     write_client_info
     cleanup_backups
     show_result
