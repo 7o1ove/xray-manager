@@ -4,6 +4,7 @@
 MIHOMO_INSTALL_SCRIPT="${SCRIPT_DIR}/core/mihomo-core.sh"
 MIHOMO_VLESS_SCRIPT="${SCRIPT_DIR}/core/mihomo-vless-reality.sh"
 MIHOMO_SS_SCRIPT="${SCRIPT_DIR}/core/mihomo-shadowsocks.sh"
+MIHOMO_MIERU_SCRIPT="${SCRIPT_DIR}/core/mihomo-mieru.sh"
 MIHOMO_HY2_SCRIPT="${SCRIPT_DIR}/core/mihomo-hysteria2.sh"
 MIHOMO_HY2_HOP_SCRIPT="${SCRIPT_DIR}/core/mihomo-hysteria2-port-hopping.sh"
 TLS_CERT_SCRIPT="${SCRIPT_DIR}/core/tls-certificate.sh"
@@ -160,6 +161,30 @@ show_client_info(){
         warning "未配置"
     fi
 
+    echo
+    section "Mieru" "$YELLOW"
+    echo
+    if [[ -f "${MIHOMO_CLIENT_DIR}/mieru.txt" ]]; then
+        while IFS= read -r line; do
+            if [[ "$line" == "Mieru Link:" ]]; then
+                label " Mieru Link"
+                echo
+                continue
+            fi
+            if [[ "$line" == "Mihomo / Clash:" ]]; then
+                echo
+                divider "$CYAN" "-"
+                echo
+                label " Mihomo / Clash YAML"
+                echo
+                continue
+            fi
+            value "$line"
+        done < "${MIHOMO_CLIENT_DIR}/mieru.txt"
+    else
+        warning "未配置"
+    fi
+
     pause
 }
 
@@ -194,6 +219,10 @@ configure_mihomo_vless(){
 
 configure_mihomo_shadowsocks(){
     run_script_and_pause "$MIHOMO_SS_SCRIPT"
+}
+
+configure_mihomo_mieru(){
+    run_script_and_pause "$MIHOMO_MIERU_SCRIPT"
 }
 
 manage_tls_certificate(){
@@ -277,6 +306,19 @@ uninstall_mihomo_shadowsocks(){
     pause
 }
 
+uninstall_mihomo_mieru(){
+    local port
+
+    header "卸载 Mihomo Mieru"
+    warning "正在卸载 Mihomo Mieru..."
+    port=$(yaml_number_field "${MIHOMO_PROTOCOL_DIR}/mieru.yaml" "port")
+    rm -f "${MIHOMO_PROTOCOL_DIR}/mieru.yaml" "${MIHOMO_CLIENT_DIR}/mieru.txt"
+    rebuild_or_stop_mihomo
+    remove_ufw_port_rule "$port" tcp
+    success "Mihomo Mieru 已卸载。"
+    pause
+}
+
 show_mihomo_logs(){
     header "Mihomo 日志"
 
@@ -342,6 +384,12 @@ show_mihomo_core(){
         kv "Shadowsocks      :" "未配置"
     fi
 
+    if [[ -f "${MIHOMO_CLIENT_DIR}/mieru.txt" ]]; then
+        kv "Mieru           :" "已配置（TCP，UDP Relay 已开启）"
+    else
+        kv "Mieru           :" "未配置"
+    fi
+
     pause
 }
 
@@ -372,7 +420,7 @@ restart_mihomo(){
 }
 
 uninstall_mihomo(){
-    local hysteria2_port vless_port shadowsocks_port
+    local hysteria2_port vless_port shadowsocks_port mieru_port
 
     header "卸载 Mihomo"
     warning "即将卸载 Mihomo，并删除其配置和连接信息。"
@@ -386,6 +434,7 @@ uninstall_mihomo(){
     hysteria2_port=$(yaml_number_field "${MIHOMO_PROTOCOL_DIR}/hysteria2.yaml" "port")
     vless_port=$(yaml_number_field "${MIHOMO_PROTOCOL_DIR}/vless.yaml" "port")
     shadowsocks_port=$(yaml_number_field "${MIHOMO_PROTOCOL_DIR}/shadowsocks.yaml" "port")
+    mieru_port=$(yaml_number_field "${MIHOMO_PROTOCOL_DIR}/mieru.yaml" "port")
 
     remove_mihomo_hysteria2_port_hopping "${hysteria2_port:-${MIHOMO_HY2_HOP_START}}"
     systemctl disable --now "$MIHOMO_SERVICE" 2>/dev/null || true
@@ -393,6 +442,7 @@ uninstall_mihomo(){
     remove_ufw_port_rule "$vless_port" udp
     remove_ufw_port_rule "$shadowsocks_port" tcp
     remove_ufw_port_rule "$shadowsocks_port" udp
+    remove_ufw_port_rule "$mieru_port" tcp
 
     rm -f /usr/local/bin/mihomo /etc/systemd/system/mihomo.service
     rm -rf "$MIHOMO_DIR"
@@ -420,8 +470,10 @@ mihomo_menu(){
         menu_item "8" "卸载 Hysteria2"
         menu_item "9" "安装 Shadowsocks"
         menu_item "10" "卸载 Shadowsocks"
-        menu_item "11" "重启 Mihomo"
-        menu_item "12" "卸载 Mihomo"
+        menu_item "11" "安装 Mieru"
+        menu_item "12" "卸载 Mieru"
+        menu_item "13" "重启 Mihomo"
+        menu_item "14" "卸载 Mihomo"
         echo
         menu_item "0" "返回主菜单"
         echo
@@ -440,8 +492,10 @@ mihomo_menu(){
             8) uninstall_mihomo_hysteria2 ;;
             9) configure_mihomo_shadowsocks ;;
             10) uninstall_mihomo_shadowsocks ;;
-            11) restart_mihomo ;;
-            12) uninstall_mihomo ;;
+            11) configure_mihomo_mieru ;;
+            12) uninstall_mihomo_mieru ;;
+            13) restart_mihomo ;;
+            14) uninstall_mihomo ;;
             0) return ;;
             *) error "无效选择。"; pause ;;
         esac
